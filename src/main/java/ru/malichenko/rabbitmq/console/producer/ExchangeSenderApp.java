@@ -5,62 +5,44 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
-import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-// Домашнее задание:
-// 3. * Сделайте возможность клиентов подписываться и отписываться от статей по темам
 
 public class ExchangeSenderApp {
-    private static final String EXCHANGE_NAME = "progExchanger";
+    private static final String EXCHANGE_NAME = "news_exchanger";
+    private static final String HELP = "/help\n" +
+            "/put <THEME> <TEXT> - publish\n" +
+            "/exit - close app";
 
     public static void main(String[] argv) throws Exception {
+        Scanner reader = new Scanner(System.in);
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost("localhost");
+        try (Connection connection = factory.newConnection();
+             Channel channel = connection.createChannel()) {
+            channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC, true);
+            String baseRoutingKey = "programming.";
+            System.out.println(HELP);
 
-        Connection connection = factory.newConnection();
-        Channel channel = connection.createChannel();
-        channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
-
-        Scanner sc = new Scanner(System.in);
-        console(sc, channel);
-        System.out.println("Test is done");
-
-        sc.close();
-        channel.close();
-    }
-
-    public static void console(Scanner sc, Channel channel) throws IOException {
-        HashMap<Integer, String> listMessages = new HashMap<>();
-        listMessages.put(1, "java|javajavajavajavajavajavajavajava");
-        listMessages.put(2, "php|phpphpphpphpphpphpphpphpphpphp");
-        listMessages.put(3, "piton|pitonpitonpitonpitonpitonpiton");
-        listMessages.put(4, "c++|c++c++c++c++c++c++c++c++");
-        System.out.print("Input post or number 1 - 5(exit): ");
-        while (true) {
-            String typing = sc.nextLine();
-            switch (typing) {
-                case "1":
-                case "2":
-                case "3":
-                case "4":
-                    sender(channel, listMessages.get(Integer.parseInt(typing)));
-                    System.out.print("Input post or number 1 - 5(exit): ");
-                    break;
-                case "5":
-                    System.out.println("goodbye");
-                    return;
-                default:
-                    sender(channel, typing);
-                    System.out.print("Input post or number 1 - 5(exit): ");
+            while (true) {
+                System.out.println("Wait command");
+                String command = reader.nextLine();
+                String[] splitCommand = command.split("\\s+", 2);
+                switch (splitCommand[0]) {
+                    case "/help":
+                        System.out.println(HELP);
+                        break;
+                    case "/put":
+                        String[] putSplit = splitCommand[1].split("\\s+", 2);
+                        String routingKey = baseRoutingKey + putSplit[0];
+                        String text = putSplit[1];
+                        channel.basicPublish(EXCHANGE_NAME, routingKey, null, String.format("%s %n theme %s", text, routingKey).getBytes(StandardCharsets.UTF_8));
+                        System.out.println(" [x] Sent to exchange");
+                        break;
+                    case "/exit":
+                        return;
+                }
             }
         }
-    }
-
-    public static void sender(Channel channel, String s) throws IOException {
-        String[] msg = s.split("\\|");
-        if(msg.length<2) return;
-        channel.basicPublish(EXCHANGE_NAME, "prog." + msg[0], null, msg[1].getBytes("UTF-8"));
-        System.out.println(" [x] Sent '" + msg[0] + "'");
-
     }
 }
